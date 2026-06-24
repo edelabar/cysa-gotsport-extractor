@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CYSA GotSport Extractor</title>
+  <style>
+    :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #18212f; background: #f4f7fb; }
+    body { max-width: 900px; margin: 0 auto; padding: 42px 22px 56px; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 4vw, 2.6rem); }
+    .intro { margin: 0 0 28px; color: #536173; font-size: 1.05rem; }
+    .card { background: white; border-radius: 16px; padding: 26px; box-shadow: 0 8px 28px #24334d12; }
+    #drop-zone { border: 2px dashed #7e9bc3; border-radius: 12px; padding: 42px 22px; text-align: center; transition: .15s; }
+    #drop-zone.over { background: #edf5ff; border-color: #2369ae; }
+    input { display: none; }
+    select { margin: 0 0 20px; padding: 8px 10px; border: 1px solid #9aabc0; border-radius: 7px; background: white; font: inherit; }
+    .button { appearance: none; display: inline-block; border: 0; border-radius: 8px; cursor: pointer; background: #1261a0; color: white; font: inherit; font-weight: 650; padding: 10px 16px; text-decoration: none; }
+    .button:hover { background: #0a4e86; } .button:disabled { background: #8ba0b5; cursor: not-allowed; }
+    #status { min-height: 1.5em; margin: 20px 0 0; }
+    #status.error { color: #a72b2b; } #status.success { color: #15743a; }
+    #results { margin-top: 25px; display: none; }
+    .summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .small { color: #536173; font-size: .93rem; } table { width: 100%; margin-top: 18px; border-collapse: collapse; font-size: .85rem; overflow: hidden; }
+    th, td { padding: 8px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; } th { background: #f6f8fb; }
+    .scroll { overflow-x: auto; } .group { margin-top: 28px; } .group h2 { margin: 0; font-size: 1.25rem; } .report-title { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; } .report-title h2 { margin: 0; } .instructions { margin: 4px 0 24px; padding: 18px 20px; background: #f6f8fb; border-radius: 10px; } .instructions summary { display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-size: 1.15rem; font-weight: 700; list-style: none; } .instructions summary::-webkit-details-marker { display: none; } .chevron { transition: transform .15s; } .instructions[open] .chevron { transform: rotate(180deg); } .instructions ol { margin: 12px 0 0; padding-left: 22px; } .instructions li { margin: 5px 0; } hr { border: 0; border-top: 1px solid #d9e1eb; margin: 9px 0 18px; } footer { margin-top: 20px; color: #677589; font-size: .83rem; }
+  </style>
+</head>
+<body>
+  <h1>CYSA GotSport Extractor</h1>
+  <p class="intro">Choose a GotSport registrations CSV. This tool runs entirely in this browser—no file is uploaded anywhere.</p>
+  <main class="card">
+    <label for="season"><strong>Season</strong></label><br>
+    <select id="season"><option value="Spring">Spring</option><option value="Fall">Fall</option></select>
+    <details id="instructions" class="instructions" open><summary><span>How to get the GotSport CSV:</span><span class="chevron" aria-hidden="true">⌄</span></summary><ol><li>Select <strong>Programs &gt; Program Registrations</strong> from the left menu.</li><li>Set <strong>Program</strong> to the current season’s Rec Program (for example, <code>CYSA U6 &amp; Rec Fall 2026</code>).</li><li>Make sure <strong>Checkout Status</strong> is <strong>Completed and Submitted</strong>.</li><li>Click <strong>Search</strong>.</li><li>Above the results, click the button with three horizontal lines on the right side of the screen.</li><li>Choose <strong>Download as CSV</strong>.</li><li>Drag the downloaded file into the <strong>Drop the registrations CSV here</strong> box below.</li></ol></details>
+    <div id="drop-zone"><strong>Drop the registrations CSV here</strong><br><span class="small">or</span><br><br><label class="button" for="file">Choose CSV file</label><input id="file" type="file" accept=".csv,text/csv"></div>
+    <p id="status" aria-live="polite"></p>
+    <section id="results">
+      <div class="report-title"><h2>Uniform Reports</h2><span class="small">Export time: <strong id="export-time"></strong></span></div><hr>
+      <section class="group"><div class="summary"><h2>U6 <span id="u6-count"></span></h2><button id="download-u6" class="button">Download U6 Uniform CSV</button></div><div class="scroll"><table id="u6-table"><thead id="u6-head"></thead><tbody id="u6-body"></tbody></table></div></section>
+      <section class="group"><div class="summary"><h2>Rec <span id="rec-count"></span></h2><button id="download-rec" class="button">Download Rec Uniform CSV</button></div><div class="scroll"><table id="rec-table"><thead id="rec-head"></thead><tbody id="rec-body"></tbody></table></div></section>
+      <section id="lottery-results" class="group"><div class="report-title"><h2>Lottery Ticket Report <span id="lottery-count"></span></h2><button id="download-lottery" class="button">Download Lottery Tickets CSV</button></div><hr><div class="scroll"><table id="lottery-table"><thead id="lottery-head"></thead><tbody id="lottery-body"></tbody></table></div></section>
+    </section>
+  </main>
+  <footer>Rules: U6 first, then Rec; each group is sorted by birth year (newest first), last name, then first name.</footer>
+<script>
+(() => {
+  const IDENTITY_HEADERS = ['Last Name','First Name','Birth Year','Contact Email','Phone','Age Group','CYSA Group'];
+  const BASE_OUTPUT_HEADERS = [...IDENTITY_HEADERS,'Needs Jersey','Jersey Size'];
+  const LOTTERY_HEADERS = [...IDENTITY_HEADERS,'Needs Lottery Ticket'];
+  const field = {
+    jerseySize: 'Jersey Size - Please select a size regardless of if you need a new jersey.',
+    jerseyNumber: 'Jersey Number - If you have an existing Jersey number please enter it here. If not please leave it blank. We cannot guarantee Jersey numbers but we do our best.',
+    existingJersey: 'Select "1" if you have a Jersey Quantity',
+    fundraiser: 'Fall Fundraiser Opt-in Quantity'
+  };
+  const commonRequired = ['Last Name','First Name','Birth Year','Contact Email','Phone','Payment Plan','Age Group',field.existingJersey,field.jerseySize];
+  let output = [], outputHeaders = BASE_OUTPUT_HEADERS, outputGroups = { U6: [], Rec: [] }, lotteryRows = [], processedSeason = 'Spring', exportTimestamp = null;
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (message, type = '') => { $('status').textContent = message; $('status').className = type; };
+  const text = (value) => value == null ? '' : String(value);
+  const includes = (value, word) => text(value).toLowerCase().includes(word.toLowerCase());
+  const moreThanOne = (value) => Number(text(value).trim()) > 1;
+  const phone = (value) => { const original = text(value), d = original.replace(/\D/g, ''), n = d.length === 11 && d[0] === '1' ? d.slice(1) : d; return n.length === 10 ? `(${n.slice(0,3)}) ${n.slice(3,6)}-${n.slice(6)}` : original; };
+  const timestampFromFilename = (filename) => { const match = text(filename).match(/(\d{8}T\d{6})(?:\.csv)?$/i); if (!match) return null; const stamp = match[1]; return { stamp, display: `${stamp.slice(0,4)}-${stamp.slice(4,6)}-${stamp.slice(6,8)} ${stamp.slice(9,11)}:${stamp.slice(11,13)}:${stamp.slice(13,15)}` }; };
+
+  // Parses standard RFC 4180 CSV, including quoted cells, commas, and newlines.
+  function parseCSV(csv) {
+    const rows = [], row = []; let cell = '', quoted = false;
+    for (let i = 0; i < csv.length; i++) {
+      const c = csv[i];
+      if (quoted) { if (c === '"' && csv[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') quoted = false; else cell += c; }
+      else if (c === '"') quoted = true;
+      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && csv[i + 1] === '\n') i++; row.push(cell); rows.push(row.splice(0)); cell = ''; }
+      else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    const headers = (rows.shift() || []).map((h, index) => index === 0 ? h.replace(/^\uFEFF/, '') : h);
+    return { headers, rows: rows.filter((r) => r.some((v) => v !== '')).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] || '']))) };
+  }
+  const headersForSeason = (season) => season === 'Spring' ? [...BASE_OUTPUT_HEADERS, 'Requested Number'] : [...BASE_OUTPUT_HEADERS];
+  function transform(sourceRows, season) {
+    return sourceRows.map((source) => {
+      const plan = text(source['Payment Plan']), free = includes(plan, 'Free'), u6 = includes(plan, 'U6');
+      const needsJersey = season === 'Fall' ? u6 || text(source[field.existingJersey]).trim() !== '1' : free ? u6 || moreThanOne(source['New Jersey Quantity']) : text(source[field.existingJersey]).trim() !== '1';
+      if (!needsJersey) return null;
+      const jerseySize = text(source[field.jerseySize]);
+      const result = {'Last Name':text(source['Last Name']),'First Name':text(source['First Name']),'Birth Year':text(source['Birth Year']),'Contact Email':text(source['Contact Email']),Phone:phone(source.Phone),'Age Group':text(source['Age Group']),'CYSA Group':u6?'U6':'Rec','Needs Jersey':'Yes','Jersey Size':jerseySize || 'Not Specified'};
+      if (season === 'Spring') result['Requested Number'] = text(source[field.jerseyNumber]);
+      return result;
+    }).filter(Boolean).sort((a,b) => (a['CYSA Group'] === 'U6' ? 0 : 1) - (b['CYSA Group'] === 'U6' ? 0 : 1) || Number(b['Birth Year']) - Number(a['Birth Year']) || a['Last Name'].localeCompare(b['Last Name'], undefined, {sensitivity:'base'}) || a['First Name'].localeCompare(b['First Name'], undefined, {sensitivity:'base'}));
+  }
+  const esc = (value) => `"${text(value).replace(/"/g, '""')}"`;
+  function renderTable(group) { const rows = outputGroups[group]; const key = group.toLowerCase(); $(`${key}-count`).textContent = `(${rows.length})`; $(`${key}-head`).innerHTML = `<tr>${outputHeaders.map((h)=>`<th>${h}</th>`).join('')}</tr>`; $(`${key}-body`).innerHTML = rows.length ? rows.map((r)=>`<tr>${outputHeaders.map((h)=>`<td>${r[h]}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${outputHeaders.length}">No players in this group need a jersey.</td></tr>`; $(`download-${key}`).disabled = rows.length === 0; }
+  function renderLottery() { $('lottery-count').textContent = `(${lotteryRows.length})`; $('lottery-head').innerHTML = `<tr>${LOTTERY_HEADERS.map((h)=>`<th>${h}</th>`).join('')}</tr>`; $('lottery-body').innerHTML = lotteryRows.length ? lotteryRows.map((r)=>`<tr>${LOTTERY_HEADERS.map((h)=>`<td>${r[h]}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${LOTTERY_HEADERS.length}">No players opted in for lottery tickets.</td></tr>`; $('download-lottery').disabled = lotteryRows.length === 0; }
+  function render() { $('export-time').textContent = exportTimestamp ? exportTimestamp.display : 'Not available'; renderTable('U6'); renderTable('Rec'); $('lottery-results').style.display = processedSeason === 'Fall' ? 'block' : 'none'; if (processedSeason === 'Fall') renderLottery(); $('instructions').open = false; $('results').style.display = 'block'; }
+  function extractLotteryRows(sourceRows) { return sourceRows.filter((source) => text(source[field.fundraiser]).trim() === '1').map((source) => ({'Last Name':text(source['Last Name']),'First Name':text(source['First Name']),'Birth Year':text(source['Birth Year']),'Contact Email':text(source['Contact Email']),Phone:phone(source.Phone),'Age Group':text(source['Age Group']),'CYSA Group':includes(source['Payment Plan'],'U6')?'U6':'Rec','Needs Lottery Ticket':'Yes'})).sort((a,b) => (a['CYSA Group'] === 'U6' ? 0 : 1) - (b['CYSA Group'] === 'U6' ? 0 : 1) || Number(b['Birth Year']) - Number(a['Birth Year']) || a['Last Name'].localeCompare(b['Last Name'], undefined, {sensitivity:'base'}) || a['First Name'].localeCompare(b['First Name'], undefined, {sensitivity:'base'})); }
+  function process(file) { if (!file) return; const season = $('season').value; setStatus(`Reading ${file.name}…`); const reader = new FileReader(); reader.onload = () => { try { const data = parseCSV(reader.result); const required = season === 'Spring' ? [...commonRequired, 'New Jersey Quantity', field.jerseyNumber] : [...commonRequired, field.fundraiser]; const missing = required.filter((h) => !data.headers.includes(h)); if (missing.length) throw new Error(`This does not look like the expected GotSport export. Missing: ${missing.join(', ')}`); outputHeaders = headersForSeason(season); output = transform(data.rows, season); outputGroups = { U6: output.filter((row) => row['CYSA Group'] === 'U6'), Rec: output.filter((row) => row['CYSA Group'] === 'Rec') }; lotteryRows = season === 'Fall' ? extractLotteryRows(data.rows) : []; processedSeason = season; exportTimestamp = timestampFromFilename(file.name); render(); setStatus(`Processed ${data.rows.length} ${season} registrations successfully.`, 'success'); } catch (error) { $('results').style.display = 'none'; setStatus(error.message, 'error'); } }; reader.onerror = () => setStatus('The file could not be read. Please try downloading the CSV again.', 'error'); reader.readAsText(file); }
+  $('season').value = new Date().getMonth() <= 4 ? 'Spring' : 'Fall';
+  $('file').addEventListener('change', (event) => process(event.target.files[0]));
+  $('season').addEventListener('change', () => { $('results').style.display = 'none'; setStatus(`${$('season').value} rules are ready. Choose a CSV file.`); });
+  $('drop-zone').addEventListener('dragover', (event) => { event.preventDefault(); $('drop-zone').classList.add('over'); });
+  $('drop-zone').addEventListener('dragleave', () => $('drop-zone').classList.remove('over'));
+  $('drop-zone').addEventListener('drop', (event) => { event.preventDefault(); $('drop-zone').classList.remove('over'); process(event.dataTransfer.files[0]); });
+  function downloadRows(rows, headers, filename) { const csv = '\uFEFF' + [headers.map(esc).join(','), ...rows.map((r) => headers.map((h)=>esc(r[h])).join(','))].join('\r\n'); const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'})); const link = Object.assign(document.createElement('a'), {href:url, download:filename}); link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+  const exportSuffix = () => exportTimestamp ? `-${exportTimestamp.stamp}` : '';
+  function download(group) { downloadRows(outputGroups[group], outputHeaders, `cysa-${$('season').value.toLowerCase()}-${group.toLowerCase()}-uniform${exportSuffix()}.csv`); }
+  $('download-u6').addEventListener('click', () => download('U6'));
+  $('download-rec').addEventListener('click', () => download('Rec'));
+  $('download-lottery').addEventListener('click', () => downloadRows(lotteryRows, LOTTERY_HEADERS, `cysa-fall-lottery-tickets${exportSuffix()}.csv`));
+})();
+</script>
+</body>
+</html>
