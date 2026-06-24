@@ -41,6 +41,11 @@ test('instructions are open initially and close after reports render', () => {
   assert.match(page, /\$\('instructions'\)\.open = false/);
 });
 
+test('GitHub Pages entry point opens the extractor', () => {
+  const page = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  assert.match(page, /CYSA-GotSport-Extractor\.html/);
+});
+
 test('splits processed rows into separate U6 and Rec exports', () => {
   const groups = splitRowsByCYSAGroup([
     { CYSAGroup: 'Rec', 'Last Name': 'Rec Player' },
